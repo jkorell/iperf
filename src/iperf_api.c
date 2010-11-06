@@ -1157,7 +1157,7 @@ iperf_reporter_callback(struct iperf_test * test)
     char ubuf[UNIT_LEN];
     char nbuf[UNIT_LEN];
     struct iperf_stream *sp = NULL;
-    iperf_size_t bytes = 0, bytes_sent = 0, bytes_received = 0;
+    iperf_size_t bytes = 0, bytes_sent = 0, bytes_received = 0, retrans = 0;
     iperf_size_t total_sent = 0, total_received = 0;
     double start_time, end_time, avg_jitter;
     struct iperf_interval_results *ip = NULL;
@@ -1169,6 +1169,9 @@ iperf_reporter_callback(struct iperf_test * test)
             SLIST_FOREACH(sp, &test->streams, streams) {
                 print_interval_results(test, sp);
                 bytes += sp->result->interval_results->bytes_transferred; /* sum up all streams */
+#ifdef __linux__
+                retrans += sp->result->interval_results->tcpInfo.tcpi_retrans;
+#endif
             }
             if (bytes <=0 ) { /* this can happen if timer goes off just when client exits */
                 fprintf(stderr, "error: bytes <= 0!\n");
@@ -1185,7 +1188,11 @@ iperf_reporter_callback(struct iperf_test * test)
 
                 start_time = timeval_diff(&sp->result->start_time,&ip->interval_start_time);
                 end_time = timeval_diff(&sp->result->start_time,&ip->interval_end_time);
+#ifdef __linux__
+                printf(report_sum_bw_format, start_time, end_time, ubuf, nbuf, retrans);
+#else
                 printf(report_sum_bw_format, start_time, end_time, ubuf, nbuf);
+#endif
 
 #if defined(linux) || defined(__FreeBSD__)			/* is it usful to figure out a way so sum * TCP_info acrross multiple streams? */
                 if (test->tcp_info)
@@ -1218,11 +1225,16 @@ iperf_reporter_callback(struct iperf_test * test)
                     unit_snprintf(nbuf, UNIT_LEN, (double) (bytes_sent / end_time), test->settings->unit_format);
                     if (test->protocol->id == Ptcp) {
                         printf("      Sent\n");
+                        ip = sp->result->last_interval_results;	
+#ifdef __linux__
+                        retrans = ip->tcpInfo.tcpi_retrans;
+                        printf(report_bw_format, sp->socket, start_time, end_time, ubuf, nbuf, retrans);
+#else
                         printf(report_bw_format, sp->socket, start_time, end_time, ubuf, nbuf);
+#endif
 
 #if defined(linux) || defined(__FreeBSD__)
                         if (test->tcp_info) {
-                            ip = sp->result->last_interval_results;	
                             print_tcpinfo(ip);
                         }
 #endif
@@ -1242,7 +1254,7 @@ iperf_reporter_callback(struct iperf_test * test)
                     unit_snprintf(nbuf, UNIT_LEN, (double) (bytes_received / end_time), test->settings->unit_format);
                     if (test->protocol->id == Ptcp) {
                         printf("      Received\n");
-                        printf(report_bw_format, sp->socket, start_time, end_time, ubuf, nbuf);
+                        printf(report_bw_format, sp->socket, start_time, end_time, ubuf, nbuf, 0);
                     }
                 }
             }
@@ -1252,11 +1264,16 @@ iperf_reporter_callback(struct iperf_test * test)
                 unit_snprintf(nbuf, UNIT_LEN, (double) total_sent / end_time, test->settings->unit_format);
                 if (test->protocol->id == Ptcp) {
                     printf("      Total sent\n");
+#ifdef __linux__
+                    retrans = sp->result->last_interval_results->tcpInfo.tcpi_retrans;
+                    printf(report_sum_bw_format, start_time, end_time, ubuf, nbuf, retrans);
+#else
                     printf(report_sum_bw_format, start_time, end_time, ubuf, nbuf);
+#endif
                     unit_snprintf(ubuf, UNIT_LEN, (double) total_received, 'A');
                     unit_snprintf(nbuf, UNIT_LEN, (double) (total_received / end_time), test->settings->unit_format);
                     printf("      Total received\n");
-                    printf(report_sum_bw_format, start_time, end_time, ubuf, nbuf);
+                    printf(report_sum_bw_format, start_time, end_time, ubuf, nbuf, 0);
                 } else {
                     avg_jitter /= test->num_streams;
                     printf(report_sum_bw_jitter_loss_format, start_time, end_time, ubuf, nbuf, avg_jitter,
@@ -1293,7 +1310,11 @@ print_interval_results(struct iperf_test * test, struct iperf_stream * sp)
     st = timeval_diff(&sp->result->start_time,&ir->interval_start_time);
     et = timeval_diff(&sp->result->start_time,&ir->interval_end_time);
     
+#ifdef __linux__
+    printf(report_bw_format, sp->socket, st, et, ubuf, nbuf, ir->tcpInfo.tcpi_retrans);
+#else
     printf(report_bw_format, sp->socket, st, et, ubuf, nbuf);
+#endif
 
 #if defined(linux) || defined(__FreeBSD__)
     if (test->tcp_info)
