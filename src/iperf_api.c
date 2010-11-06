@@ -1264,7 +1264,6 @@ iperf_reporter_callback(struct iperf_test * test)
                 if (test->protocol->id == Ptcp) {
                     printf("      Total sent\n");
 #ifdef __linux__
-                    retrans = sp->result->last_interval_results->tcpInfo.tcpi_retrans;
                     printf(report_sum_bw_format, start_time, end_time, ubuf, nbuf, retrans);
 #else
                     printf(report_sum_bw_format, start_time, end_time, ubuf, nbuf);
