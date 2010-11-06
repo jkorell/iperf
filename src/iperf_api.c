@@ -1134,8 +1134,7 @@ iperf_stats_callback(struct iperf_test * test)
         memcpy(&temp.interval_end_time, &sp->result->end_time, sizeof(struct timeval));
         temp.interval_duration = timeval_diff(&temp.interval_start_time, &temp.interval_end_time);
         //temp.interval_duration = timeval_diff(&temp.interval_start_time, &temp.interval_end_time);
-        if (test->tcp_info)
-            get_tcpinfo(test, &temp);
+        get_tcpinfo(test, &temp);
         add_to_interval_list(rp, &temp);
         rp->bytes_sent_this_interval = rp->bytes_received_this_interval = 0;
 
