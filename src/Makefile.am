@@ -11,8 +11,8 @@ libiperf_a_SOURCES      = \
                         iperf_api.h \
                         iperf_error.c \
                         iperf_error.h \
-						iperf_client_api.c \
-					    iperf_client_api.h \
+			iperf_client_api.c \
+			iperf_client_api.h \
                         iperf_server_api.c \
                         iperf_server_api.h \
                         iperf_tcp.c \
@@ -25,6 +25,7 @@ libiperf_a_SOURCES      = \
                         locale.h \
                         net.c \
                         net.h \
+                        queue.h \
                         tcp_info.c \
                         tcp_window_size.c \
                         tcp_window_size.h \
