@@ -187,11 +187,21 @@ const char report_read_length_times[] =
 const char report_bw_header[] =
 "[ ID] Interval       Transfer     Bandwidth\n";
 
+#ifdef __linux__ /* if Linux, include TCP restransmit info in report */
+const char report_bw_format[] =
+"[%3d] %4.2f-%4.2f sec  %ss  %ss/sec  (%d retransmits) \n";
+
+const char report_sum_bw_format[] =
+"[SUM] %4.2f-%4.2f sec  %ss  %ss/sec  (%d retransmits) \n";
+
+#else
+
 const char report_bw_format[] =
 "[%3d] %4.2f-%4.2f sec  %ss  %ss/sec\n";
 
 const char report_sum_bw_format[] =
 "[SUM] %4.2f-%4.2f sec  %ss  %ss/sec\n";
+#endif
 
 const char report_bw_jitter_loss_header[] =
 "[ ID] Interval       Transfer     Bandwidth       Jitter   Lost/Total \
