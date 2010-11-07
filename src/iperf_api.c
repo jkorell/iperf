@@ -1202,8 +1202,7 @@ iperf_reporter_callback(struct iperf_test * test)
         case DISPLAY_RESULTS:
             /* print final summary for all intervals */
 
-	    // dont need this I think... -blt
-            //printf(report_bw_header);
+            printf(report_bw_header);
 
             start_time = 0.;
             sp = SLIST_FIRST(&test->streams);
@@ -1292,14 +1291,19 @@ print_interval_results(struct iperf_test * test, struct iperf_stream * sp)
     char nbuf[UNIT_LEN];
     double st = 0., et = 0.;
     struct iperf_interval_results *ir = NULL;
+    static int first_time = 1;
 
     ir = sp->result->last_interval_results; /* get last entry in linked list */
     if (ir == NULL) {
         printf("print_interval_results Error: interval_results = NULL \n");
         return;
     }
-    if (sp == SLIST_FIRST(&test->streams)) {
-        printf(report_bw_header);
+
+    if (first_time) {
+       if (sp == SLIST_FIRST(&test->streams)) {
+           printf(report_bw_header);
+       }
+       first_time = 0;
     }
 
     unit_snprintf(ubuf, UNIT_LEN, (double) (ir->bytes_transferred), 'A');
