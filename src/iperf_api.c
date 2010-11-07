@@ -1202,7 +1202,8 @@ iperf_reporter_callback(struct iperf_test * test)
         case DISPLAY_RESULTS:
             /* print final summary for all intervals */
 
-            printf(report_bw_header);
+	    // dont need this I think... -blt
+            //printf(report_bw_header);
 
             start_time = 0.;
             sp = SLIST_FIRST(&test->streams);
