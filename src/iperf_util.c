@@ -26,7 +26,7 @@
 #elif defined(HAVE_UUID_UUID_H)
 #include <uuid/uuid.h>
 #else
-#error No uuid header file specified
+#warning No uuid header file specified
 #endif
 
 
@@ -44,7 +44,9 @@ void
 get_uuid(char *temp)
 {
     char     *s;
+#if defined(HAVE_UUID_UUID_H) || defined(HAVE_UUID_H)
     uuid_t    uu;
+#endif
 
 #if defined(HAVE_UUID_CREATE)
     uuid_create(&uu, NULL);
@@ -54,7 +56,7 @@ get_uuid(char *temp)
     uuid_generate(uu);
     uuid_unparse(uu, s);
 #else
-#error No uuid function specified
+    s = "uuid library not found";
 #endif
     memcpy(temp, s, 37);
 
