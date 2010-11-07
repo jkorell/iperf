@@ -46,7 +46,6 @@ get_uuid(char *temp)
     char     *s;
 #if defined(HAVE_UUID_UUID_H) || defined(HAVE_UUID_H)
     uuid_t    uu;
-#endif
 
 #if defined(HAVE_UUID_CREATE)
     uuid_create(&uu, NULL);
@@ -56,8 +55,14 @@ get_uuid(char *temp)
     uuid_generate(uu);
     uuid_unparse(uu, s);
 #else
-    s = "uuid library not found";
+    /* XXX: might be better to fake a UUID here? */
+    s = strdup("uuid library not found");
 #endif
+
+#else
+    s = strdup("uuid library not found");
+#endif
+
     memcpy(temp, s, 37);
 
     // XXX: Freeing s only works if you HAVE_UUID_GENERATE
