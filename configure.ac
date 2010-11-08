@@ -55,7 +55,7 @@ else
         use_uuid_library="no"
     else
         AC_CHECK_LIB(uuid, uuid_generate, ,
-                        AC_MSG_ERROR([libuuid is not available]))
+                        AC_MSG_WARN([libuuid is not available]))
         AC_DEFINE(HAVE_UUID_GENERATE, [], "specifies if the uuid_generate function defined")
         use_uuid_library="yes"
     fi
