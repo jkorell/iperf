@@ -1,0 +1,49 @@
+== iperf 3.0b4 2010-08-02 ==
+
+  * Added support for binding to a specific interface (-B)
+  * Added support for IPv6 mode (-6)
+  * Setting TCP window size (-w) is now supported
+  * Updates to iperf_error
+      * Added new errors
+      * Should generate more relavent messages
+  * Stream list now managed by queue.h macros
+  * Test structures are now kept intact after a test is run (for API users)
+  * Improved interval timer granularity
+      * Support for decimal values
+  * Many bug fixes
+
+== iperf 3.0b3 2010-07-23 ==
+
+  * Better error handling
+      * All errors now handled with iperf_error()
+      * All functions that can return errors return NULL or -1 on error and set i_errno appropriately
+  * Iperf API intruduced
+      * Support for adding new protocols
+      * Added support for callback functions
+          * on_connect - executes after a connection is made to the server
+          * on_new_stream - executes after a new stream is created
+          * on_test_start - executes right before the test begins
+          * on_test_finish - executes after the test is finished
+  * Added early support for verbose mode (-V)
+
+== iperf 3.0b2 2010-07-15 ==
+
+  * UDP mode now supported
+      * Support for setting bandwidth (-b)
+      * Parallel UDP stream support
+      * Reverse mode UDP support
+  * Support for setting TCP_NODELAY (-N), disabling Nagle's Algorithm
+  * Support for setting TCP MSS (-M)
+      * Note: This feature is still in development. It is still very buggy.
+
+== iperf 3.0b1 2010-07-08 ==
+
+  * TCP control socket now manages messages between client and server
+  * Dynamic server (gets test parameters from client)
+      * Server can now set test options dynamically without having to restart.
+          * Currently supported options: -l, -t, -n, -P, -R
+          * Future options: -u, -b, -w, -M, -N, -I, -T, -Z, -6
+  * Results exchange
+      * Client can now see server results (and vice versa)
+  * Reverse mode (-R)
+      * Server sends, client receives
