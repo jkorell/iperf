@@ -115,6 +115,12 @@ iperf_get_test_rate(struct iperf_test *ipt)
     return ipt->settings->rate;
 }
 
+int
+iperf_get_test_burst(struct iperf_test *ipt)
+{
+    return ipt->settings->burst;
+}
+
 char
 iperf_get_test_role(struct iperf_test *ipt)
 {
@@ -247,6 +253,12 @@ void
 iperf_set_test_rate(struct iperf_test *ipt, uint64_t rate)
 {
     ipt->settings->rate = rate;
+}
+
+void
+iperf_set_test_burst(struct iperf_test *ipt, int burst)
+{
+    ipt->settings->burst = burst;
 }
 
 void
@@ -529,6 +541,7 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
     int blksize;
     int server_flag, client_flag, rate_flag;
     char* comma;
+    char* slash;
 
     blksize = 0;
     server_flag = client_flag = rate_flag = 0;
@@ -583,6 +596,17 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
 		client_flag = 1;
                 break;
             case 'b':
+		slash = strchr(optarg, '/');
+		if (slash) {
+		    *slash = '\0';
+		    ++slash;
+		    test->settings->burst = atoi(slash);
+		    if (test->settings->burst <= 0 ||
+		        test->settings->burst > MAX_BURST) {
+			i_errno = IEBURST;
+			return -1;
+		    }
+		}
                 test->settings->rate = unit_atof(optarg);
 		rate_flag = 1;
 		client_flag = 1;
@@ -795,13 +819,15 @@ iperf_send(struct iperf_test *test, fd_set *write_setP)
     struct timeval now;
 
     /* Can we do multisend mode? */
-    if (test->settings->rate != 0)
-        multisend = 1;	/* nope */
-    else
+    if (test->settings->burst != 0)
+        multisend = test->settings->burst;
+    else if (test->settings->rate == 0)
         multisend = test->multisend;
+    else
+        multisend = 1;	/* nope */
 
     for (; multisend > 0; --multisend) {
-	if (test->settings->rate != 0)
+	if (test->settings->rate != 0 && test->settings->burst == 0)
 	    gettimeofday(&now, NULL);
 	SLIST_FOREACH(sp, &test->streams, streams) {
 	    if (sp->green_light &&
@@ -813,12 +839,17 @@ iperf_send(struct iperf_test *test, fd_set *write_setP)
 		    return r;
 		}
 		test->bytes_sent += r;
-		if (test->settings->rate != 0)
+		if (test->settings->rate != 0 && test->settings->burst == 0)
 		    iperf_check_throttle(sp, &now);
 		if (multisend > 1 && test->settings->bytes != 0 && test->bytes_sent >= test->settings->bytes)
 		    break;
 	    }
 	}
+    }
+    if (test->settings->burst != 0) {
+	gettimeofday(&now, NULL);
+	SLIST_FOREACH(sp, &test->streams, streams)
+	    iperf_check_throttle(sp, &now);
     }
     if (write_setP != NULL)
 	SLIST_FOREACH(sp, &test->streams, streams)
@@ -1021,6 +1052,8 @@ send_parameters(struct iperf_test *test)
 	    cJSON_AddIntToObject(j, "len", test->settings->blksize);
 	if (test->settings->rate)
 	    cJSON_AddIntToObject(j, "bandwidth", test->settings->rate);
+	if (test->settings->burst)
+	    cJSON_AddIntToObject(j, "burst", test->settings->burst);
 	if (test->settings->tos)
 	    cJSON_AddIntToObject(j, "TOS", test->settings->tos);
 	if (test->settings->flowlabel)
@@ -1078,6 +1111,8 @@ get_parameters(struct iperf_test *test)
 	    test->settings->blksize = j_p->valueint;
 	if ((j_p = cJSON_GetObjectItem(j, "bandwidth")) != NULL)
 	    test->settings->rate = j_p->valueint;
+	if ((j_p = cJSON_GetObjectItem(j, "burst")) != NULL)
+	    test->settings->burst = j_p->valueint;
 	if ((j_p = cJSON_GetObjectItem(j, "TOS")) != NULL)
 	    test->settings->tos = j_p->valueint;
 	if ((j_p = cJSON_GetObjectItem(j, "flowlabel")) != NULL)
@@ -1409,6 +1444,7 @@ iperf_defaults(struct iperf_test *testp)
     testp->settings->socket_bufsize = 0;    /* use autotuning */
     testp->settings->blksize = DEFAULT_TCP_BLKSIZE;
     testp->settings->rate = 0;
+    testp->settings->burst = 0;
     testp->settings->mss = 0;
     testp->settings->bytes = 0;
     memset(testp->cookie, 0, COOKIE_SIZE);
@@ -1566,6 +1602,7 @@ iperf_reset_test(struct iperf_test *test)
     test->settings->socket_bufsize = 0;
     test->settings->blksize = DEFAULT_TCP_BLKSIZE;
     test->settings->rate = 0;
+    test->settings->burst = 0;
     test->settings->mss = 0;
     memset(test->cookie, 0, COOKIE_SIZE);
     test->multisend = 10;	/* arbitrary */
@@ -1595,6 +1632,7 @@ iperf_reset_stats(struct iperf_test *test)
 	if (test->sender && test->sender_has_retransmits)
 	    rp->stream_prev_total_retrans = get_total_retransmits(sp->socket);
 	rp->stream_retrans = 0;
+	rp->stream_sacks = 0;
 	rp->start_time = now;
     }
 }
@@ -1641,6 +1679,15 @@ iperf_stats_callback(struct iperf_test *test)
 		    temp.interval_retrans = total_retrans - rp->stream_prev_total_retrans;
 		    rp->stream_retrans += temp.interval_retrans;
 		    rp->stream_prev_total_retrans = total_retrans;
+
+		    long total_sacks = get_sacks(sp->socket);
+		    temp.interval_sacks = total_sacks - rp->stream_prev_total_sacks;
+		    rp->stream_sacks += temp.interval_sacks;
+		    rp->stream_prev_total_sacks = total_sacks;
+
+		    long snd_cwnd = get_snd_cwnd(sp->socket);
+		    temp.snd_cwnd = snd_cwnd;
+
 		}
 	    }
 	} else {
@@ -1673,6 +1720,7 @@ iperf_print_intermediate(struct iperf_test *test)
     iperf_size_t bytes = 0;
     double bandwidth;
     int retransmits = 0;
+    int sacks = 0;
     double start_time, end_time;
     cJSON *json_interval;
     cJSON *json_interval_streams;
@@ -1703,8 +1751,10 @@ iperf_print_intermediate(struct iperf_test *test)
 	}
         bytes += irp->bytes_transferred;
 	if (test->protocol->id == Ptcp) {
-	    if (test->sender && test->sender_has_retransmits)
+	    if (test->sender && test->sender_has_retransmits) {
 		retransmits += irp->interval_retrans;
+		sacks += irp->interval_sacks;
+	    }
 	} else {
             total_packets += irp->interval_packet_count;
             lost_packets += irp->interval_cnt_error;
@@ -1727,9 +1777,9 @@ iperf_print_intermediate(struct iperf_test *test)
 	    if (test->sender && test->sender_has_retransmits) {
 		/* Interval sum, TCP with retransmits. */
 		if (test->json_output)
-		    cJSON_AddItemToObject(json_interval, "sum", iperf_json_printf("start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f  retransmits: %d  omitted: %b", (double) start_time, (double) end_time, (double) irp->interval_duration, (int64_t) bytes, bandwidth * 8, (int64_t) retransmits, irp->omitted));
+		    cJSON_AddItemToObject(json_interval, "sum", iperf_json_printf("start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f  retransmits: %d  sacks: %d  omitted: %b", (double) start_time, (double) end_time, (double) irp->interval_duration, (int64_t) bytes, bandwidth * 8, (int64_t) retransmits, (int64_t) sacks, irp->omitted));
 		else
-		    iprintf(test, report_sum_bw_retrans_format, start_time, end_time, ubuf, nbuf, retransmits, irp->omitted?report_omitted:"");
+		    iprintf(test, report_sum_bw_retrans_format, start_time, end_time, ubuf, nbuf, retransmits, sacks, irp->omitted?report_omitted:"");
 	    } else {
 		/* Interval sum, TCP without retransmits. */
 		if (test->json_output)
@@ -1763,6 +1813,7 @@ iperf_print_results(struct iperf_test *test)
     cJSON *json_summary_streams = NULL;
     cJSON *json_summary_stream = NULL;
     int total_retransmits = 0;
+    int total_sacks = 0;
     int total_packets = 0, lost_packets = 0;
     char ubuf[UNIT_LEN];
     char nbuf[UNIT_LEN];
@@ -1811,8 +1862,10 @@ iperf_print_results(struct iperf_test *test)
         total_received += bytes_received;
 
         if (test->protocol->id == Ptcp) {
-	    if (test->sender_has_retransmits)
+	    if (test->sender_has_retransmits) {
 		total_retransmits += sp->result->stream_retrans;
+		total_sacks += sp->result->stream_sacks;
+	    }
 	} else {
             total_packets += (sp->packet_count - sp->omitted_packet_count);
             lost_packets += sp->cnt_error;
@@ -1826,9 +1879,9 @@ iperf_print_results(struct iperf_test *test)
 	    if (test->sender_has_retransmits) {
 		/* Summary, TCP with retransmits. */
 		if (test->json_output)
-		    cJSON_AddItemToObject(json_summary_stream, "sender", iperf_json_printf("socket: %d  start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f  retransmits: %d", (int64_t) sp->socket, (double) start_time, (double) end_time, (double) end_time, (int64_t) bytes_sent, bandwidth * 8, (int64_t) sp->result->stream_retrans));
+		    cJSON_AddItemToObject(json_summary_stream, "sender", iperf_json_printf("socket: %d  start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f  retransmits: %d  sacks: %d", (int64_t) sp->socket, (double) start_time, (double) end_time, (double) end_time, (int64_t) bytes_sent, bandwidth * 8, (int64_t) sp->result->stream_retrans, (int64_t) sp->result->stream_sacks));
 		else
-		    iprintf(test, report_bw_retrans_format, sp->socket, start_time, end_time, ubuf, nbuf, sp->result->stream_retrans, report_sender);
+		    iprintf(test, report_bw_retrans_format, sp->socket, start_time, end_time, ubuf, nbuf, sp->result->stream_retrans, sp->result->stream_sacks, 0, report_sender);
 	    } else {
 		/* Summary, TCP without retransmits. */
 		if (test->json_output)
@@ -1880,9 +1933,9 @@ iperf_print_results(struct iperf_test *test)
 	    if (test->sender_has_retransmits) {
 		/* Summary sum, TCP with retransmits. */
 		if (test->json_output)
-		    cJSON_AddItemToObject(test->json_end, "sum_sent", iperf_json_printf("start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f  retransmits: %d", (double) start_time, (double) end_time, (double) end_time, (int64_t) total_sent, bandwidth * 8, (int64_t) total_retransmits));
+		    cJSON_AddItemToObject(test->json_end, "sum_sent", iperf_json_printf("start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f  retransmits: %d  sacks: %d", (double) start_time, (double) end_time, (double) end_time, (int64_t) total_sent, bandwidth * 8, (int64_t) total_retransmits, (int64_t) total_sacks));
 		else
-		    iprintf(test, report_sum_bw_retrans_format, start_time, end_time, ubuf, nbuf, total_retransmits, report_sender);
+		    iprintf(test, report_sum_bw_retrans_format, start_time, end_time, ubuf, nbuf, total_retransmits, total_sacks, report_sender);
 	    } else {
 		/* Summary sum, TCP without retransmits. */
 		if (test->json_output)
@@ -1988,9 +2041,9 @@ print_interval_results(struct iperf_test *test, struct iperf_stream *sp, cJSON *
 	if (test->sender && test->sender_has_retransmits) {
 	    /* Interval, TCP with retransmits. */
 	    if (test->json_output)
-		cJSON_AddItemToArray(json_interval_streams, iperf_json_printf("socket: %d  start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f  retransmits: %d  omitted: %b", (int64_t) sp->socket, (double) st, (double) et, (double) irp->interval_duration, (int64_t) irp->bytes_transferred, bandwidth * 8, (int64_t) irp->interval_retrans, irp->omitted));
+		cJSON_AddItemToArray(json_interval_streams, iperf_json_printf("socket: %d  start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f  retransmits: %d  sacks: %d  snd_cwnd:  %d  omitted: %b", (int64_t) sp->socket, (double) st, (double) et, (double) irp->interval_duration, (int64_t) irp->bytes_transferred, bandwidth * 8, (int64_t) irp->interval_retrans, (int64_t) irp->interval_sacks, (int64_t) irp->snd_cwnd, irp->omitted));
 	    else
-		iprintf(test, report_bw_retrans_format, sp->socket, st, et, ubuf, nbuf, irp->interval_retrans, irp->omitted?report_omitted:"");
+		iprintf(test, report_bw_retrans_format, sp->socket, st, et, ubuf, nbuf, irp->interval_retrans, irp->interval_sacks, irp->snd_cwnd, irp->omitted?report_omitted:"");
 	} else {
 	    /* Interval, TCP without retransmits. */
 	    if (test->json_output)
