@@ -1,0 +1,50 @@
+#!/bin/sh
+
+proj="iperf"
+
+tag=`awk '/IPERF_VERSION / {
+  gsub(/"/, "", $3);
+  print $3 }' src/version.h`
+
+dirname=`echo $tag $proj | awk '{
+  gsub(/-ALPHA/, "a", $1);
+  gsub(/-BETA/, "b", $1);
+  gsub(/-RELEASE/, "", $1);
+  print $2"-"$1 }'`
+
+echo tag $tag
+echo dirname $dirname
+
+do_tag ()
+{
+    hg tag -m "tagging $tag" $tag
+}
+
+do_tar ()
+{
+    tarball=${dirname}.tar.gz
+    hg archive -t tgz -p ${dirname} -X make_release -X .hgtags -r ${tag} ${tarball}
+}
+
+usage ()
+{
+    cat <<EOF
+$0: tag|tar
+
+   tag  -- create a tag using the contents of src/version.h
+   tar  -- create a tarball of the current tag
+
+General use is to do:
+
+./$0 tag
+./$0 tar
+EOF
+}
+
+case $1 in
+    tag) do_tag ;;
+    tar) do_tar ;;
+    *) echo "unknown command: $1"; usage ;;
+esac
+
+exit
