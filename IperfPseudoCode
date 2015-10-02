@@ -1,0 +1,116 @@
+
+def main():
+    test = iperf_new_test();
+    iperf_set_defaults(test);
+
+    process arguments
+        this will populate parts of test and test->default_settings
+
+    switch protocol
+        case TCP:
+            testp->create_stream = tcp_new_stream
+            testp->accept = tcp_accept
+        case UDP:
+            testp->create_stream = udp_new_stream
+            testp->accept = udp_accept
+            
+    if client:
+        foreach stream:
+            sp = testp->new_stream()
+
+        iperf_init_streams()
+
+    iperf_run()
+
+def tcp_new_stream(testp):
+    sp = iperf_new_stream(testp)
+    sp->recv = tcp_recv
+    sp->send = tcp_send
+    sp->init = tcp_init
+    sp->update_stats = tcp_update_stats
+    return sp
+
+def udp_new_stream(testp):
+    sp = iperf_new_stream(testp)
+    sp->recv = udp_recv
+    sp->send = udp_send
+    sp->init = udp_init
+    sp->update_stats = udp_update_stats
+    return sp
+
+def tcp_recv(sp):
+    recv(sp->socket)
+    update stats
+
+def tcp_send(sp):
+    send(sp->socket)
+    update stats
+
+def tcp_init(sp):
+    populate sp->local_addr & sp->remote_addr
+    set_window_size, etc
+    set other socket options, etc
+    allocate a packet buffer
+    zero out stats
+
+def udp_recv(sp):
+    recv(sp->socket)
+    update stats
+
+def udp_send(sp):
+    calculate if it's time to send based on rate
+    send(sp->socket)
+    update stats
+
+def udp_init(sp):
+    populate sp->local_addr & sp->remote_addr
+    set socket options, etc
+    allocate a packet buffer
+    zero out stats
+
+def udp_accept(testp):
+    sp = udp_new_stream()
+    sp->socket = *socket
+    test->lisener_sock = listen()
+    iperf_add_stream(testp, sp)
+
+def tcp_accept(testp):
+    sp = tcp_new_stream()
+    sp->socket = accept(testp->listener_sock)
+    iperf_add_stream(testp, sp)
+
+def iperf_run(testp):
+    switch (testp->role)
+        case server:
+            iperf_run_server()
+        case client:
+            iperf_run_client()
+
+def iperf_run_server(testp):
+    while not done:
+        select()
+        if new_stream:
+            test->accept()
+        if stream_end_message_received:
+            shutdown stream
+        if test_end_message_received:
+            break
+        if results_request_message_received:
+            send_results()
+        process each readable socket
+    
+    free resources
+
+def iperf_run_client(struct iperf_test *testp)
+    while time_left:
+        select()
+        process each writable socket
+        call stats_callback if it's time
+        call reporter_callback if it's time
+    
+    for each stream
+        send shutdown message
+    
+    send remote stats request
+    print local and remote stats
+    free resources

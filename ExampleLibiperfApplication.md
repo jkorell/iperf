@@ -1,0 +1,1 @@
+This will eventually be a full blown example, but for now take a look in the [examples](https://code.google.com/p/iperf/source/browse/#hg%2Fexamples) directory of the repo.
